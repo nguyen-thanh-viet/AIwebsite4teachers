@@ -1,0 +1,8 @@
+{
+  "name": "AI Quiz Pro by Thanh Viet PDU",
+  "description": "Một ứng dụng tạo và làm bài trắc nghiệm thông minh sử dụng Gemini AI. Giáo viên có thể tạo đề từ nội dung bất kỳ và học sinh có thể tham gia thi bằng mã Quiz.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
