@@ -168,7 +168,7 @@ const QuizDisplay: React.FC<QuizDisplayProps> = ({ quiz, studentName, onExit }) 
   const progress = (Object.keys(answers).length / quiz.questions.length) * 100;
 
   return (
-    <div className="max-w-3xl mx-auto p-4 md:p-8 pb-32">
+    <div className="max-w-3xl mx-auto p-4 md:p-8 pb-24">
        {showViolationWarning && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] backdrop-blur-sm">
           <div className="bg-white rounded-2xl p-8 max-w-sm w-full text-center shadow-lg animate-scale-up">
@@ -304,13 +304,13 @@ const QuizDisplay: React.FC<QuizDisplayProps> = ({ quiz, studentName, onExit }) 
       </div>
 
       {!submitted && (
-        <div className="fixed bottom-0 left-0 w-full p-6 bg-white/80 backdrop-blur-xl border-t border-gray-100 flex justify-center z-40">
+        <div className="fixed bottom-8 right-8 z-50">
           <button 
             onClick={() => handleSubmit.current()}
-            className="w-full max-w-xl bg-gray-900 hover:bg-black text-white text-xl font-black py-5 rounded-[2rem] shadow-2xl transition-all hover:-translate-y-2 active:scale-95 flex items-center justify-center uppercase tracking-widest"
+            className="bg-indigo-600 hover:bg-indigo-700 text-white text-lg font-black py-5 px-8 rounded-full shadow-2xl transition-all transform hover:-translate-y-2 active:scale-95 flex items-center justify-center uppercase tracking-widest"
           >
             <i className="fas fa-paper-plane mr-3"></i>
-            Nộp bài thi ngay
+            Nộp bài
           </button>
         </div>
       )}

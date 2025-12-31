@@ -1,17 +1,77 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppMode } from './types';
 import Navbar from './components/Navbar';
 import TeacherView from './components/TeacherView';
 import StudentView from './components/StudentView';
+import { onAuthStateChangedListener, signInTeacher, signOutTeacher } from './services/quizService';
+import { User } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+
 
 const App: React.FC = () => {
   const [mode, setMode] = useState<AppMode>(AppMode.HOME);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [emailInput, setEmailInput] = useState('teacher@quizapp.com');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  
+  useEffect(() => {
+    const unsubscribe = onAuthStateChangedListener((user) => {
+      setCurrentUser(user);
+      if (user) {
+        setMode(AppMode.TEACHER);
+      }
+    });
+    return unsubscribe;
+  }, []);
+
+
+  const handleTeacherClick = () => {
+    if (currentUser) {
+      setMode(AppMode.TEACHER);
+    } else {
+      setPasswordError('');
+      setPasswordInput('');
+      setIsPasswordVisible(false);
+      setShowPasswordModal(true);
+    }
+  };
+  
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoggingIn(true);
+    setPasswordError('');
+    try {
+      await signInTeacher(emailInput, passwordInput);
+      setShowPasswordModal(false);
+    } catch (error: any) {
+      console.error("Firebase Auth Error:", error); // Log lỗi chi tiết để debug
+      if (error.code === 'auth/operation-not-allowed') {
+        setPasswordError('Phương thức đăng nhập này chưa được kích hoạt trên Firebase.');
+      } else if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
+        setPasswordError('Email hoặc mật khẩu không chính xác.');
+      } else {
+        setPasswordError('Lỗi hệ thống. Vui lòng thử lại.');
+      }
+      setPasswordInput('');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+  
+  const handleSignOut = async () => {
+    await signOutTeacher();
+    setMode(AppMode.HOME);
+  };
 
   const renderContent = () => {
     switch (mode) {
       case AppMode.TEACHER:
-        return <TeacherView />;
+        return currentUser ? <TeacherView /> : null;
       case AppMode.STUDENT:
         return <StudentView />;
       case AppMode.HOME:
@@ -29,7 +89,7 @@ const App: React.FC = () => {
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
               <div 
-                onClick={() => setMode(AppMode.TEACHER)}
+                onClick={handleTeacherClick}
                 className="group cursor-pointer bg-white p-10 rounded-[3rem] shadow-xl hover:shadow-2xl transition-all border-2 border-transparent hover:border-indigo-100 transform hover:-translate-y-2"
               >
                 <div className="w-20 h-20 bg-indigo-100 rounded-3xl flex items-center justify-center mx-auto mb-6 transition-transform group-hover:rotate-6">
@@ -66,10 +126,64 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen">
-      <Navbar mode={mode} setMode={setMode} />
+      <Navbar mode={mode} setMode={setMode} onTeacherClick={handleTeacherClick} currentUser={currentUser} onSignOut={handleSignOut} />
       <main className="animate-fade-in">
         {renderContent()}
       </main>
+
+      {showPasswordModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[100] backdrop-blur-sm">
+          <div className="bg-white rounded-[2.5rem] p-10 max-w-sm w-full text-center shadow-2xl scale-up relative">
+            <button onClick={() => setShowPasswordModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 w-8 h-8">
+              <i className="fas fa-times"></i>
+            </button>
+            <div className="w-16 h-16 bg-indigo-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <i className="fas fa-lock text-2xl text-indigo-600"></i>
+            </div>
+            <h3 className="text-2xl font-bold text-gray-800 mb-2">Đăng nhập Giáo viên</h3>
+            <p className="text-gray-500 mb-6">Sử dụng tài khoản được cấp để truy cập.</p>
+            <form onSubmit={handlePasswordSubmit}>
+              <div className="space-y-4">
+                 <input
+                  type="email"
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                  className="w-full p-4 border-2 border-gray-200 rounded-xl bg-gray-50 text-center font-bold outline-none focus:border-indigo-500"
+                  placeholder="Email"
+                  required
+                />
+                <div className="relative">
+                  <input
+                    type={isPasswordVisible ? 'text' : 'password'}
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                    className="w-full p-4 border-2 border-gray-200 rounded-xl bg-gray-50 text-center font-bold outline-none focus:border-indigo-500 pr-12"
+                    placeholder="Mật khẩu"
+                    autoFocus
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setIsPasswordVisible(!isPasswordVisible)}
+                    className="absolute top-1/2 right-4 -translate-y-1/2 text-gray-400 hover:text-gray-600 w-8 h-8"
+                    aria-label="Toggle password visibility"
+                  >
+                    <i className={`fas ${isPasswordVisible ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+                  </button>
+                </div>
+              </div>
+              {passwordError && <p className="text-red-500 text-sm mt-2">{passwordError}</p>}
+              <button
+                type="submit"
+                disabled={isLoggingIn}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl mt-4 transition-all disabled:opacity-50"
+              >
+                {isLoggingIn ? <i className="fas fa-spinner fa-spin"></i> : "Xác nhận"}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

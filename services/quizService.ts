@@ -1,6 +1,7 @@
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getDatabase, ref, set, get, child, push, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+import { getDatabase, ref, set, get, child, push, serverTimestamp, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, User } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { Quiz, QuizResult } from "../types";
 
 // CẤU HÌNH FIREBASE THỰC TẾ
@@ -18,6 +19,22 @@ const firebaseConfig = {
 // Khởi tạo Firebase
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
+const auth = getAuth(app);
+
+// === Firebase Authentication Functions ===
+export const signInTeacher = (email: string, pass: string) => {
+  return signInWithEmailAndPassword(auth, email, pass);
+};
+
+export const signOutTeacher = () => {
+  return signOut(auth);
+};
+
+export const onAuthStateChangedListener = (callback: (user: User | null) => void) => {
+  return onAuthStateChanged(auth, callback);
+};
+// =======================================
+
 
 export const saveQuiz = async (quiz: Quiz): Promise<void> => {
   const quizRef = ref(db, 'quizzes/' + quiz.id);
@@ -35,6 +52,13 @@ export const getQuizzes = async (): Promise<Quiz[]> => {
     return Object.values(data) as Quiz[];
   }
   return [];
+};
+
+export const deleteQuizAndResults = async (quizId: string): Promise<void> => {
+  const quizRef = ref(db, `quizzes/${quizId}`);
+  const resultsRef = ref(db, `results/${quizId}`);
+  await remove(quizRef);
+  await remove(resultsRef);
 };
 
 export const getQuizByCode = async (code: string): Promise<Quiz | undefined> => {
@@ -63,6 +87,15 @@ export const getResultsForQuiz = async (quizId: string): Promise<QuizResult[]> =
     return Object.values(data) as QuizResult[];
   }
   return [];
+};
+
+export const getAllResults = async (): Promise<Record<string, any>> => {
+  const dbRef = ref(db);
+  const snapshot = await get(child(dbRef, 'results'));
+  if (snapshot.exists()) {
+    return snapshot.val();
+  }
+  return {};
 };
 
 export const generateCode = (): string => {
