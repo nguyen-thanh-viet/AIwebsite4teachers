@@ -22,20 +22,22 @@ const TeacherView: React.FC = () => {
 
   const [myQuizzes, setMyQuizzes] = useState<Quiz[]>([]);
   const [selectedQuizId, setSelectedQuizId] = useState<string | null>(null);
+  const [selectedQuiz, setSelectedQuiz] = useState<Quiz | null>(null);
   const [selectedResults, setSelectedResults] = useState<QuizResult[]>([]);
   const [fetchingQuizzes, setFetchingQuizzes] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [showQuizContent, setShowQuizContent] = useState(false);
 
   const [isRecording, setIsRecording] = useState(false);
   const recognitionRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (tempQuestions.length > 0 && (window as any).MathJax) {
+    if ((tempQuestions.length > 0 || (selectedQuiz && showQuizContent)) && (window as any).MathJax) {
       (window as any).MathJax.typesetPromise?.();
     }
-  }, [tempQuestions, editingId]);
+  }, [tempQuestions, editingId, selectedQuiz, showQuizContent]);
 
   const loadQuizzes = async () => {
     if (activeTab === 'stats' || activeTab === 'delete') {
@@ -43,12 +45,8 @@ const TeacherView: React.FC = () => {
       try {
         const [qs, allRes] = await Promise.all([getQuizzes(), getAllResults()]);
         
-        const quizzesWithResults = qs.filter(q => {
-          if (!allRes) return false;
-          return Object.prototype.hasOwnProperty.call(allRes, q.id);
-        });
-        
-        setMyQuizzes(quizzesWithResults.sort((a, b) => (b.createdAt as number || 0) - (a.createdAt as number || 0)));
+        // Hiển thị tất cả đề thi trong tab stats để giáo viên có thể xem nội dung ngay cả khi chưa có kết quả
+        setMyQuizzes(qs.sort((a, b) => (b.createdAt as number || 0) - (a.createdAt as number || 0)));
       } catch (err) {
         console.error("Lỗi khi tải danh sách đề:", err);
       } finally {
@@ -173,6 +171,7 @@ const TeacherView: React.FC = () => {
         await deleteQuizAndResults(id);
         if (selectedQuizId === id) {
           setSelectedQuizId(null);
+          setSelectedQuiz(null);
           setSelectedResults([]);
         }
         setMyQuizzes(prev => prev.filter(q => q.id !== id));
@@ -193,8 +192,11 @@ const TeacherView: React.FC = () => {
 
   const handleViewResults = async (id: string) => {
     if (deletingId === id) return;
+    const quiz = myQuizzes.find(q => q.id === id);
+    setSelectedQuiz(quiz || null);
     setSelectedQuizId(id);
     setSelectedResults([]); 
+    setShowQuizContent(false);
     try {
       const results = await getResultsForQuiz(id);
       setSelectedResults(results);
@@ -259,218 +261,282 @@ const TeacherView: React.FC = () => {
       </div>
 
       {activeTab === 'create' && (
-        <>
-          <div className="bg-white rounded-2xl shadow-xl overflow-hidden mb-8 border border-gray-100">
-            <div className="bg-indigo-600 px-6 py-4">
-              <h2 className="text-2xl font-bold text-white flex items-center">
-                <i className="fas fa-pen-nib mr-3"></i> Thiết lập đề thi
-              </h2>
-            </div>
-            <div className="p-6">
-              <div className="mb-6">
-                <label className="block text-gray-700 font-semibold mb-3">Nội dung đề thi:</label>
-                <div className="rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
-                  <textarea
-                    className="w-full h-40 p-4 border-b border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
-                    placeholder={isRecording ? "🔴 Đang nghe..." : "Nhập nội dung kiến thức..."}
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                    readOnly={isRecording}
-                  />
-                  <div className="flex items-center justify-between p-2 bg-gray-50/50">
-                    <div className="flex items-center space-x-1">
-                      <button onClick={handleFileButtonClick} className="px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200 rounded-lg transition-all"><i className="fas fa-upload mr-2"></i> Tải file</button>
-                      <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".txt" className="hidden" />
-                      <button onClick={handleMicToggle} className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${isRecording ? 'bg-red-100 text-red-700 animate-pulse' : 'text-gray-700 hover:bg-gray-200'}`}>
-                        <i className={`fas ${isRecording ? 'fa-stop-circle' : 'fa-microphone'} mr-2`}></i> {isRecording ? "Dừng" : "Ghi âm"}
-                      </button>
-                    </div>
-                  </div>
-                </div>
+        <div className="space-y-6 bg-white p-8 rounded-[2.5rem] shadow-xl border border-gray-50">
+          <div>
+            <label className="block text-sm font-black text-gray-400 uppercase tracking-widest mb-3">Nội dung kiến thức</label>
+            <div className="relative">
+              <textarea 
+                className="w-full p-6 bg-gray-50 border-2 border-gray-100 rounded-3xl focus:border-indigo-500 outline-none min-h-[200px] text-lg font-medium"
+                placeholder="Dán văn bản, bài tập hoặc lý thuyết vào đây..."
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+              />
+              <div className="absolute bottom-4 right-4 flex space-x-2">
+                <button 
+                  onClick={handleMicToggle}
+                  className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-white text-gray-400 hover:text-indigo-600 shadow-sm'}`}
+                  title="Nhận diện giọng nói"
+                >
+                  <i className={`fas ${isRecording ? 'fa-stop' : 'fa-microphone'}`}></i>
+                </button>
+                <button 
+                  onClick={handleFileButtonClick}
+                  className="w-12 h-12 bg-white text-gray-400 hover:text-indigo-600 rounded-2xl flex items-center justify-center shadow-sm transition-all"
+                  title="Tải file .txt"
+                >
+                  <i className="fas fa-file-upload"></i>
+                </button>
+                <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".txt" className="hidden" />
               </div>
-
-              <div className="mb-6">
-                <label className="block text-gray-700 font-semibold mb-3">Mức độ khó:</label>
-                <div className="flex p-1 bg-gray-100 rounded-xl space-x-1">
-                  {['EASY', 'MEDIUM', 'HARD'].map((id) => (
-                    <button key={id} onClick={() => setDifficulty(id)} className={`flex-1 py-3 rounded-lg font-bold transition-all ${difficulty === id ? 'bg-white shadow-md text-indigo-600' : 'text-gray-500'}`}>
-                      {id === 'EASY' ? 'Dễ' : id === 'MEDIUM' ? 'Trung bình' : 'Khó'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                <div>
-                  <label className="block text-gray-700 font-semibold mb-2">Số câu hỏi:</label>
-                  <input type="number" min="2" max="20" value={count} onChange={(e) => setCount(parseInt(e.target.value))} className="w-full p-3 border rounded-lg outline-none" />
-                </div>
-                <div>
-                  <label className="block text-gray-700 font-semibold mb-2">Thời gian (phút):</label>
-                  <input type="number" min="1" max="180" value={timeLimit} onChange={(e) => setTimeLimit(parseInt(e.target.value))} className="w-full p-3 border rounded-lg outline-none" />
-                </div>
-                <div className="flex items-end">
-                  <button onClick={handleGenerate} disabled={loading} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg h-[50px] disabled:opacity-50">
-                    {loading ? <i className="fas fa-spinner fa-spin mr-2"></i> : <i className="fas fa-magic mr-2"></i>} Tạo đề AI
-                  </button>
-                </div>
-              </div>
-              {error && <p className="text-red-500 text-sm mb-4 bg-red-50 p-3 rounded-lg">{error}</p>}
             </div>
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+              <label className="block text-sm font-black text-gray-400 uppercase tracking-widest mb-3">Số lượng câu</label>
+              <input 
+                type="number" 
+                className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-indigo-500 outline-none font-bold"
+                value={count}
+                onChange={(e) => setCount(parseInt(e.target.value))}
+                min="1" max="20"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-black text-gray-400 uppercase tracking-widest mb-3">Độ khó</label>
+              <select 
+                className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-indigo-500 outline-none font-bold"
+                value={difficulty}
+                onChange={(e) => setDifficulty(e.target.value)}
+              >
+                <option value="EASY">Dễ</option>
+                <option value="MEDIUM">Trung bình</option>
+                <option value="HARD">Khó</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-black text-gray-400 uppercase tracking-widest mb-3">Thời gian (phút)</label>
+              <input 
+                type="number" 
+                className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-indigo-500 outline-none font-bold"
+                value={timeLimit}
+                onChange={(e) => setTimeLimit(parseInt(e.target.value))}
+                min="1"
+              />
+            </div>
+          </div>
+
+          {error && (
+            <div className="p-4 bg-red-50 text-red-600 rounded-2xl font-bold flex items-center">
+              <i className="fas fa-exclamation-circle mr-3 text-xl"></i> {error}
+            </div>
+          )}
+
+          <button 
+            onClick={handleGenerate}
+            disabled={loading}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xl font-black py-5 rounded-[2rem] shadow-xl shadow-indigo-100 transition-all disabled:opacity-50"
+          >
+            {loading ? <><i className="fas fa-spinner fa-spin mr-3"></i> Đang tạo câu hỏi...</> : <><i className="fas fa-magic mr-3"></i> Soạn đề với AI</>}
+          </button>
+
           {tempQuestions.length > 0 && (
-            <div className="bg-white rounded-2xl shadow-lg p-6 mb-8 border-t-4 border-green-500 animate-fade-in">
-              <div className="flex justify-between items-center mb-8 border-b pb-4">
-                <h3 className="text-xl font-black text-gray-800"><i className="fas fa-eye mr-2 text-indigo-600"></i> Xem trước đề thi</h3>
-                <div className="flex gap-2">
-                  <button onClick={() => exportQuizToWord(tempQuestions)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-bold shadow-md flex items-center"><i className="fas fa-file-word mr-2"></i> Word</button>
-                  <button onClick={handleSave} disabled={loading} className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-xl font-bold shadow-lg disabled:opacity-50 flex items-center"><i className="fas fa-rocket mr-2"></i> Lưu & Phát hành</button>
+            <div className="mt-12 space-y-8 animate-fade-in">
+              <div className="flex justify-between items-center">
+                <h3 className="text-2xl font-black text-gray-800">Bản thảo câu hỏi</h3>
+                <button onClick={handleSave} className="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-xl font-bold shadow-lg">Lưu & Xuất bản</button>
+              </div>
+              {tempQuestions.map((q, idx) => (
+                <div key={q.id} className="bg-gray-50 p-6 rounded-3xl border-2 border-dashed border-gray-200">
+                   <div className="flex justify-between mb-4">
+                     <span className="font-bold text-indigo-600">Câu {idx + 1}</span>
+                     <button onClick={() => startEditing(q)} className="text-gray-400 hover:text-indigo-600"><i className="fas fa-edit"></i></button>
+                   </div>
+                   <p className="text-lg font-medium text-gray-800 mb-4">{q.question}</p>
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                     {q.options.map((opt, oIdx) => (
+                       <div key={oIdx} className={`p-3 rounded-xl border ${oIdx === q.correctAnswerIndex ? 'bg-green-50 border-green-200 text-green-700 font-bold' : 'bg-white border-gray-100 text-gray-500'}`}>
+                         {String.fromCharCode(65 + oIdx)}. {opt}
+                       </div>
+                     ))}
+                   </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {quizCode && (
+            <div className="mt-8 bg-indigo-600 p-8 rounded-[2.5rem] text-white text-center animate-bounce-in">
+              <p className="text-indigo-100 font-bold uppercase tracking-widest mb-2">Mã đề thi của bạn</p>
+              <div className="text-6xl font-black mb-6 tracking-tighter">{quizCode}</div>
+              <button 
+                onClick={handleCopyCode}
+                className="bg-white text-indigo-600 px-8 py-3 rounded-2xl font-black hover:bg-indigo-50 transition-all shadow-lg"
+              >
+                {copied ? 'ĐÃ COPY!' : 'COPY MÃ'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {(activeTab === 'stats' || activeTab === 'delete') && (
+        <div className="space-y-4">
+          {fetchingQuizzes ? (
+            <div className="text-center py-20"><i className="fas fa-spinner fa-spin text-4xl text-indigo-600"></i></div>
+          ) : myQuizzes.length === 0 ? (
+            <div className="bg-white p-12 rounded-[2.5rem] text-center border-2 border-dashed border-gray-100 text-gray-400">
+              <i className="fas fa-folder-open text-6xl mb-4"></i>
+              <p className="text-xl font-bold">Chưa có đề thi nào được tạo.</p>
+            </div>
+          ) : (
+            myQuizzes.map(quiz => (
+              <div 
+                key={quiz.id} 
+                className={`bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col md:flex-row justify-between items-center transition-all hover:shadow-md ${selectedQuizId === quiz.id ? 'ring-2 ring-indigo-500' : ''}`}
+              >
+                <div className="flex items-center mb-4 md:mb-0">
+                  <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 font-black text-xl mr-5">
+                    {quiz.id.slice(0, 2)}
+                  </div>
+                  <div>
+                    <h4 className="font-black text-gray-800 text-xl">{quiz.id}</h4>
+                    <p className="text-gray-400 text-sm font-bold uppercase tracking-tighter">
+                      {new Date(quiz.createdAt).toLocaleDateString('vi-VN')} • {quiz.questions.length} câu • {quiz.timeLimitMinutes}p
+                    </p>
+                  </div>
+                </div>
+                <div className="flex space-x-2">
+                  {activeTab === 'stats' ? (
+                    <>
+                      <button 
+                        onClick={() => handleViewResults(quiz.id)}
+                        className="bg-indigo-50 text-indigo-600 px-5 py-2.5 rounded-xl font-bold hover:bg-indigo-600 hover:text-white transition-all"
+                      >
+                        <i className="fas fa-poll mr-2"></i> Kết quả
+                      </button>
+                      <button 
+                        onClick={() => exportQuizToWord(quiz.questions, quiz.id)}
+                        className="bg-green-50 text-green-600 px-5 py-2.5 rounded-xl font-bold hover:bg-green-600 hover:text-white transition-all"
+                      >
+                        <i className="fas fa-file-word mr-2"></i> Word
+                      </button>
+                    </>
+                  ) : (
+                    <button 
+                      onClick={(e) => handleDeleteRequest(e, quiz.id)}
+                      disabled={deletingId === quiz.id}
+                      className={`px-6 py-2.5 rounded-xl font-bold transition-all ${confirmingDeleteId === quiz.id ? 'bg-red-600 text-white scale-110' : 'bg-red-50 text-red-600 hover:bg-red-600 hover:text-white'}`}
+                    >
+                      {deletingId === quiz.id ? <i className="fas fa-spinner fa-spin"></i> : confirmingDeleteId === quiz.id ? 'Xác nhận xóa?' : <><i className="fas fa-trash-alt mr-2"></i> Xóa</>}
+                    </button>
+                  )}
                 </div>
               </div>
+            ))
+          )}
 
-              <div className="space-y-6">
-                {tempQuestions.map((q, idx) => (
-                  <div key={q.id} className="p-6 bg-gray-50 rounded-2xl border border-gray-100 relative group">
-                    <span className="absolute -left-3 top-6 w-8 h-8 bg-white border-2 border-indigo-600 text-indigo-600 rounded-lg flex items-center justify-center font-black shadow-sm z-10">{idx + 1}</span>
-                    <div className="flex justify-between items-start mb-4 pl-4">
-                      <p className="font-bold text-gray-800">{q.question}</p>
-                      <button onClick={() => startEditing(q)} className="text-indigo-500 hover:text-indigo-700"><i className="fas fa-edit"></i></button>
+          {selectedQuizId && activeTab === 'stats' && (
+            <div className="mt-8 bg-white p-8 rounded-[2.5rem] shadow-xl border border-gray-50 animate-fade-in">
+              <div className="flex justify-between items-center mb-8">
+                <h3 className="text-2xl font-black text-gray-800">Thống kê chi tiết: {selectedQuizId}</h3>
+                <button onClick={() => setShowQuizContent(!showQuizContent)} className="text-indigo-600 font-bold underline">
+                  {showQuizContent ? 'Ẩn nội dung đề' : 'Xem nội dung đề'}
+                </button>
+              </div>
+
+              {showQuizContent && selectedQuiz && (
+                <div className="mb-10 space-y-6 p-6 bg-gray-50 rounded-3xl border border-gray-100">
+                  {selectedQuiz.questions.map((q, i) => (
+                    <div key={i} className="border-b border-gray-200 pb-4 last:border-0">
+                      <p className="font-bold text-gray-800 mb-2">{i+1}. {q.question}</p>
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        {q.options.map((o, oi) => (
+                          <div key={oi} className={oi === q.correctAnswerIndex ? 'text-green-600 font-bold' : 'text-gray-500'}>
+                            {String.fromCharCode(65+oi)}. {o}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pl-4">
-                      {q.options.map((opt, oIdx) => (
-                        <div key={oIdx} className={`p-3 rounded-xl border text-sm ${oIdx === q.correctAnswerIndex ? 'bg-green-50 border-green-300 text-green-800' : 'bg-white border-gray-200'}`}>
-                          {opt}
-                        </div>
+                  ))}
+                </div>
+              )}
+
+              {selectedResults.length === 0 ? (
+                <div className="text-center py-10 text-gray-400 font-medium">Chưa có học sinh nào làm bài này.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="text-gray-400 uppercase text-xs font-black tracking-widest border-b border-gray-100">
+                        <th className="px-4 py-4">Thí sinh</th>
+                        <th className="px-4 py-4">Điểm số</th>
+                        <th className="px-4 py-4">Tỷ lệ</th>
+                        <th className="px-4 py-4">Thời gian</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedResults.sort((a,b) => b.score - a.score).map((res, idx) => (
+                        <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50 transition-all">
+                          <td className="px-4 py-4 font-bold text-gray-700">{res.studentName}</td>
+                          <td className="px-4 py-4">
+                            <span className={`px-3 py-1 rounded-full font-bold ${res.score / res.totalQuestions >= 0.8 ? 'bg-green-100 text-green-600' : res.score / res.totalQuestions >= 0.5 ? 'bg-yellow-100 text-yellow-600' : 'bg-red-100 text-red-600'}`}>
+                              {res.score}/{res.totalQuestions}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4 font-black text-gray-800">{Math.round((res.score / res.totalQuestions) * 100)}%</td>
+                          <td className="px-4 py-4 text-gray-400 text-sm">{new Date(res.timestamp).toLocaleString('vi-VN')}</td>
+                        </tr>
                       ))}
-                    </div>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {editingId && editForm && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-[2.5rem] p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            <h3 className="text-2xl font-black text-gray-800 mb-6">Chỉnh sửa câu hỏi</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Câu hỏi</label>
+                <textarea 
+                  className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-indigo-500 outline-none font-bold"
+                  value={editForm.question}
+                  onChange={(e) => setEditForm({...editForm, question: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-1 gap-3">
+                {editForm.options.map((opt, idx) => (
+                  <div key={idx} className="flex items-center space-x-3">
+                    <button 
+                      onClick={() => setEditForm({...editForm, correctAnswerIndex: idx})}
+                      className={`w-10 h-10 rounded-xl font-bold transition-all ${editForm.correctAnswerIndex === idx ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-400'}`}
+                    >
+                      {String.fromCharCode(65 + idx)}
+                    </button>
+                    <input 
+                      type="text" 
+                      className="flex-1 p-3 bg-gray-50 border border-gray-100 rounded-xl focus:border-indigo-500 outline-none"
+                      value={opt}
+                      onChange={(e) => {
+                        const newOpts = [...editForm.options];
+                        newOpts[idx] = e.target.value;
+                        setEditForm({...editForm, options: newOpts});
+                      }}
+                    />
                   </div>
                 ))}
               </div>
             </div>
-          )}
-        </>
-      )}
-
-      {activeTab === 'stats' && (
-        <div className="space-y-6 animate-fade-in">
-          <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100">
-             <div className="bg-gray-50 border-b border-gray-100 px-6 py-4">
-                <h3 className="text-xl font-bold text-gray-800">Đề thi đã có bài làm</h3>
-             </div>
-             <div className="divide-y divide-gray-50 max-h-[400px] overflow-y-auto">
-               {fetchingQuizzes ? (
-                 <div className="p-10 text-center"><i className="fas fa-spinner fa-spin text-2xl text-indigo-600"></i></div>
-               ) : myQuizzes.length === 0 ? (
-                 <div className="p-10 text-center text-gray-400">Chưa có đề thi nào có học sinh nộp bài.</div>
-               ) : (
-                 myQuizzes.map(q => (
-                   <div 
-                     key={q.id} 
-                     onClick={() => handleViewResults(q.id)}
-                     className={`p-5 flex justify-between items-center cursor-pointer hover:bg-indigo-50/50 transition-all ${selectedQuizId === q.id ? 'bg-indigo-50 border-l-4 border-indigo-500' : ''}`}
-                   >
-                     <div className="flex-grow">
-                       <div className="font-mono text-xl font-black text-indigo-600">{q.id}</div>
-                       <div className="text-xs text-gray-400 mt-1">{q.questions.length} câu • {q.timeLimitMinutes}p</div>
-                     </div>
-                     <i className="fas fa-chevron-right text-gray-300 pr-2"></i>
-                   </div>
-                 ))
-               )}
-             </div>
-          </div>
-
-          {selectedQuizId && (
-            <div className="bg-white rounded-3xl shadow-xl p-8 border border-gray-100">
-              <h3 className="text-2xl font-black text-gray-800 mb-6">Kết quả chi tiết: {selectedQuizId}</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="text-gray-400 text-sm uppercase font-bold border-b">
-                      <th className="pb-4 px-4">Học sinh</th>
-                      <th className="pb-4 px-4">Điểm</th>
-                      <th className="pb-4 px-4">Thời gian</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedResults.length === 0 ? (
-                      <tr><td colSpan={3} className="py-10 text-center text-gray-400">Đang tải...</td></tr>
-                    ) : (
-                      selectedResults.map(r => (
-                        <tr key={r.id} className="border-b last:border-0">
-                          <td className="py-4 px-4 font-bold">{r.studentName}</td>
-                          <td className="py-4 px-4 text-indigo-600 font-black">{r.score}/{r.totalQuestions}</td>
-                          <td className="py-4 px-4 text-sm text-gray-400">{new Date(r.timestamp).toLocaleString('vi-VN')}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+            <div className="flex space-x-3 mt-8">
+              <button onClick={saveEdit} className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-bold shadow-lg">Lưu thay đổi</button>
+              <button onClick={cancelEdit} className="flex-1 bg-gray-100 text-gray-600 py-4 rounded-2xl font-bold">Hủy</button>
             </div>
-          )}
-        </div>
-      )}
-
-      {activeTab === 'delete' && (
-         <div className="space-y-6 animate-fade-in">
-          <div className="bg-white rounded-3xl shadow-xl overflow-hidden border-2 border-red-100">
-             <div className="bg-red-50 border-b border-red-100 px-6 py-4">
-                <h3 className="text-xl font-bold text-red-800 flex items-center">
-                  <i className="fas fa-exclamation-triangle mr-3"></i> Xóa vĩnh viễn đề thi
-                </h3>
-             </div>
-             <div className="divide-y divide-gray-50 max-h-[400px] overflow-y-auto">
-               {fetchingQuizzes ? (
-                 <div className="p-10 text-center"><i className="fas fa-spinner fa-spin text-2xl text-indigo-600"></i></div>
-               ) : myQuizzes.length === 0 ? (
-                 <div className="p-10 text-center text-gray-400">Không có đề thi nào để xóa.</div>
-               ) : (
-                 myQuizzes.map(q => {
-                   const isConfirming = confirmingDeleteId === q.id;
-                   const isDeleting = deletingId === q.id;
-                   return (
-                     <div 
-                       key={q.id} 
-                       className="p-5 flex justify-between items-center"
-                     >
-                       <div>
-                         <div className="font-mono text-xl font-black text-gray-700">{q.id}</div>
-                         <div className="text-xs text-gray-400 mt-1">{q.questions.length} câu • {q.timeLimitMinutes}p</div>
-                       </div>
-                       <button 
-                         type="button"
-                         onClick={(e) => handleDeleteRequest(e, q.id)}
-                         className={`font-bold py-3 px-6 rounded-xl transition-all disabled:opacity-50 flex items-center min-w-[140px] justify-center
-                          ${isConfirming ? 'bg-yellow-400 hover:bg-yellow-500 text-black' : 'bg-red-500 hover:bg-red-600 text-white'}`}
-                         title="Xóa vĩnh viễn"
-                         disabled={isDeleting}
-                       >
-                         {isDeleting ? <i className="fas fa-spinner fa-spin"></i> : 
-                          isConfirming ? 'Xác nhận?' : <span><i className="fas fa-trash-alt mr-2"></i> Xóa</span>
-                         }
-                       </button>
-                     </div>
-                   );
-                 })
-               )}
-             </div>
-          </div>
-        </div>
-      )}
-
-      {quizCode && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[100] backdrop-blur-sm">
-          <div className="bg-white rounded-[2.5rem] p-10 max-w-md w-full text-center shadow-2xl scale-up">
-            <h3 className="text-3xl font-black text-gray-800 mb-2">Đã lưu lên Cloud!</h3>
-            <div className="bg-indigo-600 rounded-3xl p-6 mb-8 mt-6 relative group">
-              <span className="text-5xl font-mono font-black text-white tracking-widest">{quizCode}</span>
-              <button onClick={handleCopyCode} className="absolute top-2 right-2 p-2 text-white bg-white/20 hover:bg-white/40 rounded-xl transition-all">
-                {copied ? <span className="text-[10px] uppercase font-bold">OK!</span> : <i className="fas fa-copy"></i>}
-              </button>
-            </div>
-            <button onClick={() => setQuizCode(null)} className="w-full bg-gray-900 text-white py-4 rounded-2xl font-bold transition-all hover:bg-black">Đóng</button>
           </div>
         </div>
       )}
